@@ -1,0 +1,7 @@
+# Ignore large local data files
+metadata.csv
+*.csv
+*.tsv
+*.zip
+*.h5
+.DS_Store
