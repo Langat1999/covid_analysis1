@@ -32,26 +32,29 @@ def load_data():
         session = requests.Session()
         response = session.get(URL, params={'id': file_id}, stream=True)
 
+        # Bypass large file warning
         for key, value in response.cookies.items():
             if key.startswith("download_warning"):
                 response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
                 break
 
         content = response.content.decode('utf-8', errors='ignore')
+
         if "<html" in content.lower():
-            st.error("❌ Google Drive returned an HTML page. Check permissions or file size.")
+            st.error("❌ Google Drive returned an HTML page. Check file permissions or size.")
             st.stop()
 
         df = pd.read_csv(StringIO(content), low_memory=False)
 
-        # Handle missing publish_time
+        # Fallback for missing publish_time
         if 'publish_time' not in df.columns:
-            for col in ['pub_date', 'published', 'date', 'publication_date', 'created']:
+            fallback_cols = ['pub_date', 'published', 'date', 'publication_date', 'created']
+            for col in fallback_cols:
                 if col in df.columns:
                     df.rename(columns={col: 'publish_time'}, inplace=True)
                     break
             else:
-                st.error("No valid date column found.")
+                st.error("❌ No valid date column found.")
                 return pd.DataFrame()
 
         df['publish_time'] = pd.to_datetime(df['publish_time'], errors='coerce')
@@ -60,7 +63,7 @@ def load_data():
         return df
 
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"❌ Error loading data: {e}")
         return pd.DataFrame()
 
 df = load_data()
@@ -129,7 +132,8 @@ def clean_and_tokenize(texts):
         words.extend(tokens)
     stopwords = set([
         'the', 'and', 'of', 'in', 'a', 'to', 'for', 'on', 'with',
-        'by', 'from', 'an', 'as', 'is', 'are', 'at', 'this', 'that', 'we', 'study', 'covid', 'using'
+        'by', 'from', 'an', 'as', 'is', 'are', 'at', 'this', 'that',
+        'we', 'study', 'covid', 'using', 'use', 'data', 'paper'
     ])
     return [word for word in words if word not in stopwords and len(word) > 2]
 
