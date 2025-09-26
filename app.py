@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import requests
 from io import StringIO
+from wordcloud import WordCloud
+import re
+from collections import Counter
 
 # ✅ Page setup
 st.set_page_config(
@@ -12,16 +15,14 @@ st.set_page_config(
     page_icon="🦠"
 )
 
-# ✅ App title and description
 st.title("🦠 CORD-19 Research Papers Explorer")
-
 st.markdown("""
-Welcome to the **CORD-19 Explorer** — a tool to help visualize and analyze COVID-19 research trends from the CORD-19 dataset.
+Explore trends in COVID-19 scientific research from the CORD-19 dataset.
 
-Use the sidebar filters to refine the data by **year** and **journal**. You can also search paper titles and download filtered data.
+This interactive app allows you to analyze paper counts, top journals, keywords, and more.
 """)
 
-# ✅ Load and cache data from Google Drive (large file support)
+# ✅ Load and cache data from Google Drive
 @st.cache_data(show_spinner="📥 Loading metadata from Google Drive...")
 def load_data():
     try:
@@ -31,29 +32,26 @@ def load_data():
         session = requests.Session()
         response = session.get(URL, params={'id': file_id}, stream=True)
 
-        # Bypass large file confirmation
         for key, value in response.cookies.items():
             if key.startswith("download_warning"):
                 response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
                 break
 
         content = response.content.decode('utf-8', errors='ignore')
-        csv_data = StringIO(content)
-        df = pd.read_csv(csv_data, low_memory=False)
+        if "<html" in content.lower():
+            st.error("❌ Google Drive returned an HTML page. Check permissions or file size.")
+            st.stop()
 
-        # ✅ Handle missing 'publish_time' by auto-renaming alternatives
+        df = pd.read_csv(StringIO(content), low_memory=False)
+
+        # Handle missing publish_time
         if 'publish_time' not in df.columns:
-            fallback_columns = ['pub_date', 'published', 'date', 'publication_date', 'created']
-            found = False
-            for col in fallback_columns:
+            for col in ['pub_date', 'published', 'date', 'publication_date', 'created']:
                 if col in df.columns:
                     df.rename(columns={col: 'publish_time'}, inplace=True)
-                    found = True
                     break
-            if not found:
-                st.error("❌ Could not find a suitable date column. Expected one of:")
-                st.code(fallback_columns)
-                st.write("📄 Found columns:", df.columns.tolist())
+            else:
+                st.error("No valid date column found.")
                 return pd.DataFrame()
 
         df['publish_time'] = pd.to_datetime(df['publish_time'], errors='coerce')
@@ -62,101 +60,100 @@ def load_data():
         return df
 
     except Exception as e:
-        st.error(f"❌ Error loading data from Google Drive: {e}")
+        st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
 df = load_data()
 
-# ✅ Stop app if data is not loaded
 if df.empty:
     st.stop()
 
-# ✅ Sidebar: Filters
+# ✅ Sidebar filters
 with st.sidebar:
     st.header("🔧 Filters")
-
     min_year = max(2019, int(df['year'].min()))
     max_year = int(df['year'].max())
-    year_range = st.slider("Select year range:", min_year, max_year, (min_year, max_year))
+    year_range = st.slider("Select Year Range", min_year, max_year, (min_year, max_year))
 
     journals = ['All'] + sorted(df['journal'].dropna().unique().tolist())
-    selected_journal = st.selectbox("Filter by journal:", journals)
+    selected_journal = st.selectbox("Select Journal", journals)
 
 # ✅ Filter data
-filtered_df = df[
-    (df['year'] >= year_range[0]) & (df['year'] <= year_range[1])
-]
+filtered_df = df[df['year'].between(year_range[0], year_range[1])]
 if selected_journal != 'All':
     filtered_df = filtered_df[filtered_df['journal'] == selected_journal]
 
-# ✅ Summary Metrics
-st.subheader("📊 Summary Metrics")
-col1, col2, col3, col4 = st.columns(4)
+# ✅ Summary metrics
+st.subheader("📊 Summary Statistics")
+col1, col2, col3 = st.columns(3)
 col1.metric("Total Papers", len(filtered_df))
 col2.metric("Unique Journals", filtered_df['journal'].nunique())
-col3.metric("Date Range", f"{year_range[0]} - {year_range[1]}")
-col4.metric("Latest Year", int(filtered_df['year'].max()) if not filtered_df.empty else "N/A")
+col3.metric("Year Range", f"{year_range[0]} - {year_range[1]}")
 
-# ✅ Data Preview
+# ✅ Papers by Year
+st.subheader("📈 Publications by Year")
+yearly_counts = filtered_df['year'].value_counts().sort_index()
+fig, ax = plt.subplots()
+ax.plot(yearly_counts.index, yearly_counts.values, marker='o')
+ax.set_xlabel("Year")
+ax.set_ylabel("Number of Publications")
+ax.set_title("COVID-19 Papers Published Over Time")
+ax.grid(True)
+st.pyplot(fig)
+
+# ✅ Top Journals
+st.subheader("🏆 Top 10 Journals")
+top_journals = filtered_df['journal'].value_counts().head(10)
+fig2, ax2 = plt.subplots()
+sns.barplot(x=top_journals.values, y=top_journals.index, ax=ax2)
+ax2.set_xlabel("Number of Papers")
+ax2.set_title("Top Journals Publishing COVID-19 Research")
+st.pyplot(fig2)
+
+# ✅ Source Distribution
+if 'source_x' in filtered_df.columns:
+    st.subheader("📦 Distribution by Source")
+    fig3, ax3 = plt.subplots()
+    filtered_df['source_x'].value_counts().plot(kind='bar', ax=ax3)
+    ax3.set_title("Number of Papers by Source")
+    ax3.set_xlabel("Source")
+    ax3.set_ylabel("Paper Count")
+    st.pyplot(fig3)
+
+# ✅ Word Frequency (Titles)
+st.subheader("🧠 Most Frequent Words in Titles")
+def clean_and_tokenize(texts):
+    words = []
+    for text in texts:
+        tokens = re.findall(r'\b\w+\b', str(text).lower())
+        words.extend(tokens)
+    stopwords = set([
+        'the', 'and', 'of', 'in', 'a', 'to', 'for', 'on', 'with',
+        'by', 'from', 'an', 'as', 'is', 'are', 'at', 'this', 'that', 'we', 'study', 'covid', 'using'
+    ])
+    return [word for word in words if word not in stopwords and len(word) > 2]
+
+words = clean_and_tokenize(filtered_df['title'])
+word_freq = Counter(words)
+common_words = dict(word_freq.most_common(100))
+
+# ✅ Word Cloud
+st.subheader("☁️ Word Cloud of Titles")
+wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(common_words)
+fig4, ax4 = plt.subplots(figsize=(10, 5))
+ax4.imshow(wordcloud, interpolation='bilinear')
+ax4.axis('off')
+st.pyplot(fig4)
+
+# ✅ Sample data
 st.subheader("📄 Sample Papers")
-if not filtered_df.empty:
-    st.dataframe(
-        filtered_df[['title', 'journal', 'year', 'publish_time']].head(10),
-        use_container_width=True
-    )
-else:
-    st.info("No data available for the selected filters.")
+st.dataframe(filtered_df[['title', 'journal', 'year', 'publish_time']].head(10), use_container_width=True)
 
-# ✅ Visualizations
-st.subheader("📈 Visual Insights")
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("#### Publications by Year")
-    if not filtered_df.empty:
-        year_counts = filtered_df['year'].value_counts().sort_index()
-        fig1, ax1 = plt.subplots(figsize=(8, 4))
-        ax1.bar(year_counts.index, year_counts.values, color='skyblue', edgecolor='black')
-        ax1.set_xlabel("Year")
-        ax1.set_ylabel("Number of Papers")
-        ax1.set_title("COVID-19 Publications by Year")
-        ax1.grid(axis='y', linestyle='--', alpha=0.7)
-        st.pyplot(fig1)
-    else:
-        st.info("No data available.")
-
-with col2:
-    st.markdown("#### Top 10 Journals")
-    if not filtered_df.empty:
-        top_journals = filtered_df['journal'].value_counts().head(10)
-        fig2, ax2 = plt.subplots(figsize=(8, 4))
-        ax2.barh(top_journals.index[::-1], top_journals.values[::-1], color='lightgreen', edgecolor='black')
-        ax2.set_xlabel("Number of Papers")
-        ax2.set_title("Top Journals Publishing COVID-19 Research")
-        ax2.grid(axis='x', linestyle='--', alpha=0.7)
-        st.pyplot(fig2)
-    else:
-        st.info("No journal data to display.")
-
-# ✅ Advanced Search
-with st.expander("🔍 Advanced Title Search"):
-    search_term = st.text_input("Enter a keyword to search paper titles:")
-    if search_term:
-        search_results = filtered_df[filtered_df['title'].str.contains(search_term, case=False, na=False)]
-        st.success(f"Found {len(search_results)} matching paper(s).")
-        st.dataframe(search_results[['title', 'journal', 'year', 'publish_time']].head(10), use_container_width=True)
-
-# ✅ Download section
-st.subheader("💾 Export Filtered Data")
-if not filtered_df.empty:
-    csv = filtered_df[['title', 'journal', 'year', 'publish_time']].to_csv(index=False)
-    st.download_button(
-        label="📥 Download CSV",
-        data=csv,
-        file_name=f"cord19_filtered_{year_range[0]}_{year_range[1]}.csv",
-        mime="text/csv"
-    )
+# ✅ Download option
+st.subheader("💾 Download Filtered Data")
+csv = filtered_df.to_csv(index=False)
+st.download_button("📥 Download CSV", data=csv, file_name="cord19_filtered.csv", mime="text/csv")
 
 # ✅ Footer
 st.markdown("---")
-st.markdown("📘 Made with ❤️ by **Jackson Mutiso Langat** | 📧 mutisojackson55@gmail.com")
+st.markdown("📘 Built by **Jackson Mutiso Langat** | 📧 mutisojackson55@gmail.com")
