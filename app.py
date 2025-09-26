@@ -22,28 +22,43 @@ Use the sidebar filters to refine the data by **year** and **journal**. You can 
 """)
 
 # ✅ Load and cache data from Google Drive (large file support)
-@st.cache_data
+@st.cache_data(show_spinner="📥 Loading metadata from Google Drive...")
 def load_data():
     try:
         file_id = "18trAu6UY9hnGUEF8_YHKcJrMXXzqGu6a"
-        base_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        session = requests.Session()
-        response = session.get(base_url, stream=True)
+        URL = "https://drive.google.com/uc?export=download"
 
-        # Detect and bypass large file confirmation prompt
+        session = requests.Session()
+        response = session.get(URL, params={'id': file_id}, stream=True)
+
+        # Bypass large file confirmation
         for key, value in response.cookies.items():
             if key.startswith("download_warning"):
-                confirm_token = value
-                base_url = f"https://drive.google.com/uc?export=download&confirm={confirm_token}&id={file_id}"
-                response = session.get(base_url, stream=True)
+                response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
                 break
 
-        content = response.content.decode('utf-8')
+        content = response.content.decode('utf-8', errors='ignore')
         csv_data = StringIO(content)
-
         df = pd.read_csv(csv_data, low_memory=False)
+
+        # ✅ Handle missing 'publish_time' by auto-renaming alternatives
+        if 'publish_time' not in df.columns:
+            fallback_columns = ['pub_date', 'published', 'date', 'publication_date', 'created']
+            found = False
+            for col in fallback_columns:
+                if col in df.columns:
+                    df.rename(columns={col: 'publish_time'}, inplace=True)
+                    found = True
+                    break
+            if not found:
+                st.error("❌ Could not find a suitable date column. Expected one of:")
+                st.code(fallback_columns)
+                st.write("📄 Found columns:", df.columns.tolist())
+                return pd.DataFrame()
+
         df['publish_time'] = pd.to_datetime(df['publish_time'], errors='coerce')
         df['year'] = df['publish_time'].dt.year.fillna(0).astype(int)
+
         return df
 
     except Exception as e:
@@ -60,23 +75,21 @@ if df.empty:
 with st.sidebar:
     st.header("🔧 Filters")
 
-    # Year range
     min_year = max(2019, int(df['year'].min()))
     max_year = int(df['year'].max())
     year_range = st.slider("Select year range:", min_year, max_year, (min_year, max_year))
 
-    # Journal selector
     journals = ['All'] + sorted(df['journal'].dropna().unique().tolist())
     selected_journal = st.selectbox("Filter by journal:", journals)
 
-# ✅ Filter data based on sidebar
+# ✅ Filter data
 filtered_df = df[
     (df['year'] >= year_range[0]) & (df['year'] <= year_range[1])
 ]
 if selected_journal != 'All':
     filtered_df = filtered_df[filtered_df['journal'] == selected_journal]
 
-# ✅ Metrics Summary
+# ✅ Summary Metrics
 st.subheader("📊 Summary Metrics")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total Papers", len(filtered_df))
