@@ -1,36 +1,70 @@
+✅ README.md
 # 🦠 CORD-19 Explorer
 
-A lightweight data analysis project that explores COVID-19 research paper trends using the [CORD-19 dataset](https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge).
+A lightweight Streamlit web app that explores trends in COVID-19 research papers using the CORD-19 metadata dataset.
 
-This project includes:
-- 📊 A detailed Jupyter Notebook for data cleaning, analysis, and visualization
-- 🧹 Preprocessing of COVID-19 metadata
-- 🖥️ A Streamlit web application for interactive exploration
+This project visualizes the volume of scientific publications over time, identifies the most active journals, and allows advanced search through paper titles.
 
----
+## 📂 Features
 
-## ✅ Features
-
-- 📅 Year-wise publication trends
-- 🏢 Top journals publishing COVID-19 papers
-- 📚 Top metadata sources
-- 📋 Sample data preview with titles and journal info
-- Built using:
-  - Python 3.7+
-  - pandas
-  - matplotlib
-  - seaborn
-  - Streamlit
-  - Requests
+- 📊 Year-wise publication trends
+- 🏢 Top publishing journals
+- 🔍 Advanced title keyword search
+- 📄 Sample data display
+- 💾 Download filtered results as CSV
+- 🔗 Large dataset streaming from Google Drive
+- 🚀 Built with Python, pandas, matplotlib, seaborn, and Streamlit
 
 ---
 
-## 🚀 How to Run This Project
+## 📦 Installation
 
-> Prerequisite: Python 3.7+ and pip installed on your system
-
-### 1. Clone the Repository
 ```bash
-git clone https://github.com/Langat1999/COVID_ANALYSIS.git
-cd COVID_ANALYSIS
+git clone https://github.com/Langat1999/COVID-ANALYSIS.git
+cd COVID-ANALYSIS
+pip install -r requirements.txt
 
+▶️ How to Run
+streamlit run app.py
+
+🌐 Live Demo
+
+Deployed version: Visit Streamlit App
+
+(Data loads from Google Drive automatically, no large file upload required.)
+
+🧪 Data Source
+
+CORD-19 Metadata
+Provided by the Allen Institute for AI (AI2)
+CORD-19 Dataset
+
+CSV streamed from Google Drive:
+cleaned_metadata.csv (~500MB+)
+
+📁 Project Structure
+COVID-ANALYSIS/
+├── app.py                 # Streamlit main app
+├── requirements.txt       # Project dependencies
+├── README.md              # Project overview
+
+👨‍💻 Author
+
+Jackson Mutiso Langat
+📧 mutisojackson55@gmail.com
+
+📜 License
+
+MIT License – free to use and modify.
+
+
+---
+
+### ✅ `requirements.txt`
+
+```txt
+pandas>=1.1.0
+matplotlib>=3.2.2
+seaborn>=0.11.0
+streamlit>=1.0.0
+requests>=2.25.0
