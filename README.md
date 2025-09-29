@@ -106,7 +106,8 @@ Users will be prompted to upload their own metadata.csv after launch.
 
 ## 🧪 Example Screenshot
 
-Add a screenshot or GIF of your app here to show users what to expect.
+
+Check deployed apk here ---> https://covidanalysis1-zhuqcgftrrctfzwdtz3ngk.streamlit.app/
 
 ## 👨‍💻 Author
 
