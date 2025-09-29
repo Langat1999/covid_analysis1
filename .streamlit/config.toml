@@ -1,7 +1,7 @@
 [server]
 headless = true
 enableCORS = false
-maxUploadSize = 2048  # ✅ 2GB upload limit
+maxUploadSize = 2048  # Allow up to 2GB uploads
 
 [theme]
 base = "light"

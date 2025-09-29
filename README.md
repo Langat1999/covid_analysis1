@@ -82,6 +82,7 @@ pip install -r requirements.txt
 [server]
 headless = true
 enableCORS = false
+maxUploadSize = 2048  # Allow up to 2GB uploads
 
 [theme]
 base = "light"
@@ -90,6 +91,7 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#000000"
 font = "sans serif"
+
 ```
 
 ## 🌐 Deployment

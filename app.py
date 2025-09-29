@@ -17,19 +17,21 @@ st.title("🦠 CORD-19 Research Papers Explorer")
 st.markdown("""
 Explore trends in COVID-19 scientific research from the CORD-19 dataset.
 
-This interactive app allows you to analyze paper counts, top journals, keywords, and more.
+Upload the `metadata.csv` file to visualize publication trends, top journals, word clouds, and more.
 """)
 
 # ✅ File uploader
 uploaded_file = st.file_uploader("📂 Upload your `metadata.csv` file", type=["csv"])
 
-# ✅ Load and validate uploaded file
-@st.cache_data(show_spinner="📥 Loading uploaded data...")
+# ✅ Chunked and cached data loading
+@st.cache_data(show_spinner="📥 Loading large CSV... Please wait")
 def load_data(file):
     try:
-        df = pd.read_csv(file, low_memory=False)
+        # Efficient chunked loading for large files
+        chunks = pd.read_csv(file, chunksize=100000, low_memory=False)
+        df = pd.concat(chunks)
 
-        # Fallback for missing publish_time
+        # Handle missing publish_time
         if 'publish_time' not in df.columns:
             fallback_cols = ['pub_date', 'published', 'date', 'publication_date', 'created']
             for col in fallback_cols:
@@ -40,27 +42,32 @@ def load_data(file):
                 st.error("❌ No valid date column found.")
                 return pd.DataFrame()
 
+        # Date parsing
         df['publish_time'] = pd.to_datetime(df['publish_time'], errors='coerce')
-        df['year'] = df['publish_time'].dt.year
-        df = df[df['year'].notna()]
-        df['year'] = df['year'].astype(int)
+        df = df[df['publish_time'].notna()]
+        df['year'] = df['publish_time'].dt.year.astype(int)
 
+        # Ensure journal column
         if 'journal' not in df.columns:
             df['journal'] = "Unknown"
 
         return df
 
     except Exception as e:
-        st.error(f"❌ Error reading file: {e}")
+        st.error(f"❌ Error loading file: {e}")
         return pd.DataFrame()
 
-if uploaded_file:
+# ✅ Session state: load data once
+if uploaded_file and "df" not in st.session_state:
     df = load_data(uploaded_file)
-    if df.empty:
-        st.stop()
-else:
-    st.info("⬆️ Please upload the CORD-19 `metadata.csv` file to begin.")
+    if not df.empty:
+        st.session_state.df = df
+
+if "df" not in st.session_state:
+    st.info("⬆️ Please upload a valid `metadata.csv` file to begin.")
     st.stop()
+
+df = st.session_state.df
 
 # ✅ Sidebar filters
 with st.sidebar:
@@ -72,19 +79,19 @@ with st.sidebar:
     journals = ['All'] + sorted(df['journal'].dropna().unique().tolist())
     selected_journal = st.selectbox("Select Journal", journals)
 
-# ✅ Filter data
+# ✅ Apply filters
 filtered_df = df[df['year'].between(year_range[0], year_range[1])]
 if selected_journal != 'All':
     filtered_df = filtered_df[filtered_df['journal'] == selected_journal]
 
-# ✅ Summary metrics
+# ✅ Summary stats
 st.subheader("📊 Summary Statistics")
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Papers", len(filtered_df))
+col1.metric("Total Papers", f"{len(filtered_df):,}")
 col2.metric("Unique Journals", filtered_df['journal'].nunique())
 col3.metric("Year Range", f"{year_range[0]} - {year_range[1]}")
 
-# ✅ Papers by Year
+# ✅ Publications by Year
 st.subheader("📈 Publications by Year")
 all_years = list(range(year_range[0], year_range[1] + 1))
 yearly_counts = filtered_df['year'].value_counts().reindex(all_years, fill_value=0).sort_index()
@@ -92,7 +99,7 @@ fig, ax = plt.subplots()
 ax.plot(yearly_counts.index, yearly_counts.values, marker='o')
 ax.set_xlabel("Year")
 ax.set_ylabel("Number of Publications")
-ax.set_title("COVID-19 Papers Published Over Time")
+ax.set_title("COVID-19 Research Publications Over Time")
 ax.grid(True)
 st.pyplot(fig)
 
@@ -115,8 +122,9 @@ if 'source_x' in filtered_df.columns:
     ax3.set_ylabel("Paper Count")
     st.pyplot(fig3)
 
-# ✅ Word Frequency (Titles)
+# ✅ Title Word Frequency
 st.subheader("🧠 Most Frequent Words in Titles")
+
 def clean_and_tokenize(texts):
     words = []
     for text in texts:
@@ -145,7 +153,7 @@ st.pyplot(fig4)
 st.subheader("📄 Sample Papers")
 st.dataframe(filtered_df[['title', 'journal', 'year', 'publish_time']].head(10), use_container_width=True)
 
-# ✅ Download option
+# ✅ Download filtered data
 st.subheader("💾 Download Filtered Data")
 csv = filtered_df.to_csv(index=False)
 st.download_button("📥 Download CSV", data=csv, file_name="cord19_filtered.csv", mime="text/csv")
