@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import requests
-from io import StringIO
 from wordcloud import WordCloud
 import re
 from collections import Counter
@@ -22,29 +20,14 @@ Explore trends in COVID-19 scientific research from the CORD-19 dataset.
 This interactive app allows you to analyze paper counts, top journals, keywords, and more.
 """)
 
-# ✅ Load and cache data from Google Drive
-@st.cache_data(show_spinner="📥 Loading metadata from Google Drive...")
-def load_data():
+# ✅ File uploader
+uploaded_file = st.file_uploader("📂 Upload your `metadata.csv` file", type=["csv"])
+
+# ✅ Load and validate uploaded file
+@st.cache_data(show_spinner="📥 Loading uploaded data...")
+def load_data(file):
     try:
-        file_id = "18trAu6UY9hnGUEF8_YHKcJrMXXzqGu6a"
-        URL = "https://drive.google.com/uc?export=download"
-
-        session = requests.Session()
-        response = session.get(URL, params={'id': file_id}, stream=True)
-
-        # Bypass large file warning
-        for key, value in response.cookies.items():
-            if key.startswith("download_warning"):
-                response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
-                break
-
-        content = response.content.decode('utf-8', errors='ignore')
-
-        if "<html" in content.lower():
-            st.error("❌ Google Drive returned an HTML page. Check file permissions or size.")
-            st.stop()
-
-        df = pd.read_csv(StringIO(content), low_memory=False)
+        df = pd.read_csv(file, low_memory=False)
 
         # Fallback for missing publish_time
         if 'publish_time' not in df.columns:
@@ -58,17 +41,25 @@ def load_data():
                 return pd.DataFrame()
 
         df['publish_time'] = pd.to_datetime(df['publish_time'], errors='coerce')
-        df['year'] = df['publish_time'].dt.year.fillna(0).astype(int)
+        df['year'] = df['publish_time'].dt.year
+        df = df[df['year'].notna()]
+        df['year'] = df['year'].astype(int)
+
+        if 'journal' not in df.columns:
+            df['journal'] = "Unknown"
 
         return df
 
     except Exception as e:
-        st.error(f"❌ Error loading data: {e}")
+        st.error(f"❌ Error reading file: {e}")
         return pd.DataFrame()
 
-df = load_data()
-
-if df.empty:
+if uploaded_file:
+    df = load_data(uploaded_file)
+    if df.empty:
+        st.stop()
+else:
+    st.info("⬆️ Please upload the CORD-19 `metadata.csv` file to begin.")
     st.stop()
 
 # ✅ Sidebar filters
@@ -95,7 +86,8 @@ col3.metric("Year Range", f"{year_range[0]} - {year_range[1]}")
 
 # ✅ Papers by Year
 st.subheader("📈 Publications by Year")
-yearly_counts = filtered_df['year'].value_counts().sort_index()
+all_years = list(range(year_range[0], year_range[1] + 1))
+yearly_counts = filtered_df['year'].value_counts().reindex(all_years, fill_value=0).sort_index()
 fig, ax = plt.subplots()
 ax.plot(yearly_counts.index, yearly_counts.values, marker='o')
 ax.set_xlabel("Year")
