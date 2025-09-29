@@ -1,7 +1,7 @@
 [server]
 headless = true
 enableCORS = false
-maxUploadSize = 1024  # ✅ In MB — allows up to 1 GB file uploads
+maxUploadSize = 2048  # ✅ 2GB upload limit
 
 [theme]
 base = "light"
@@ -10,3 +10,4 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#000000"
 font = "sans serif"
+
